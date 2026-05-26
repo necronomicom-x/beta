@@ -969,12 +969,12 @@ async function generatePDF() {
   // Sub-título pequeño (arriba)
   doc.setTextColor(140, 175, 225);
   doc.setFontSize(7); doc.setFont('helvetica', 'bold');
-  doc.text('REPORTE DE VISITA DE CALIDAD', tX, 16); // ← podés cambiar este texto
+  doc.text('VISITAS DE AUDITORÍA', tX, 16); // ← podés cambiar este texto
 
   // Título principal grande
   doc.setTextColor(...C.white);
   doc.setFontSize(15.5); doc.setFont('helvetica', 'bold');
-  doc.text('Auditoría de Instalación HFC', tX, 27); // ← podés cambiar este texto
+  doc.text('REPORTE DE VISITA DE CALIDAD', tX, 27); // ← podés cambiar este texto
 
   // ── BADGE ID CLIENTE (esquina superior derecha) ──
   const BW = 54, BH = 26, BX = W - mR - BW, BY = 10;
