@@ -862,10 +862,26 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// ─── PDF ───
-// ─── PDF ───
+// ─── GENERACIÓN DEL PDF ───
+// ════════════════════════════════════════════════════════════════════
+//  GUÍA RÁPIDA PARA EDITAR EL PDF:
+//
+//  • Cambiar un nombre de campo    → buscá la sección correspondiente
+//    (ej: SECCIÓN 1, SECCIÓN 2...) y editá el texto entre comillas
+//    en los pares ['Nombre del campo', valor]
+//
+//  • Cambiar título de sección     → editá el segundo parámetro de secH()
+//    Ej: secH(1, 'Datos del cliente')  ← cambiá 'Datos del cliente'
+//
+//  • Cambiar tamaño del logo       → buscá "TAMAÑO DEL LOGO"
+//  • Cambiar colores               → buscá "PALETA DE COLORES"
+//  • Cambiar texto del encabezado  → buscá "TEXTOS DEL ENCABEZADO"
+//  • Cambiar texto del pie         → buscá "TEXTO DEL PIE DE PÁGINA"
+// ════════════════════════════════════════════════════════════════════
 async function generatePDF() {
-  // ── VALIDACIÓN ──
+
+  // ── VALIDACIÓN DE CAMPOS OBLIGATORIOS ──
+  // Si querés agregar más campos obligatorios, seguí el mismo patrón
   let valid = true;
   const idClienteEl    = document.getElementById('idCliente');
   const idClienteField = document.getElementById('fieldIdCliente');
@@ -882,68 +898,85 @@ async function generatePDF() {
   if (!valid) { showToast('⚠️ Completá los campos obligatorios (*)'); goTo(0); return; }
 
   const { jsPDF } = window.jspdf;
-  // Carta: 215.9 × 279.4 mm
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
-  const W = 215.9, H = 279.4;
-  const mL = 14, mR = 14, mB = 16;
-  const cW  = W - mL - mR;          // 187.9 mm usable
-  const GAP = 5;                     // gap entre columnas
-  const c2W = (cW - GAP) / 2;       // ~91.45 mm cada columna
-  let y = 0;
 
-  // ── PALETA ──
+  // ── TAMAÑO DE PÁGINA ──
+  // format: 'letter' = carta (215.9 × 279.4 mm) | 'a4' = A4 (210 × 297 mm)
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const W = 215.9, H = 279.4;   // ancho y alto de la hoja en mm
+
+  // ── MÁRGENES (en mm) ──
+  const mL = 14;   // margen izquierdo
+  const mR = 14;   // margen derecho
+  const mB = 16;   // margen inferior (reservado para el pie de página)
+  const cW  = W - mL - mR;    // ancho útil de contenido (~187.9 mm)
+  const GAP = 5;               // espacio entre las dos columnas de campos
+  const c2W = (cW - GAP) / 2; // ancho de cada columna (~91 mm)
+  let y = 0; // posición vertical actual (se va incrementando)
+
+  // ── PALETA DE COLORES ──
+  // Formato: [R, G, B]  — valores entre 0 y 255
   const C = {
-    white:       [255, 255, 255],
-    bg:          [248, 249, 252],
-    bgAlt:       [237, 242, 252],
-    text:        [ 17,  24,  39],
-    muted:       [100, 112, 135],
-    border:      [215, 222, 235],
-    accent:      [ 26,  79, 160],
-    accentDk:    [ 15,  50, 110],
-    accentLt:    [219, 234, 254],
-    green:       [ 22, 163,  74],
-    greenBg:     [240, 253, 244],
-    red:         [220,  38,  38],
-    redBg:       [254, 242, 242],
-    orange:      [161,  98,   7],
-    headerBg:    [ 12,  22,  48],
+    white:    [255, 255, 255],  // blanco
+    bg:       [248, 249, 252],  // fondo alterno de filas (gris muy claro)
+    bgAlt:    [237, 242, 252],  // fondo de sub-encabezados
+    text:     [ 17,  24,  39],  // texto principal (casi negro)
+    muted:    [100, 112, 135],  // texto de etiquetas (gris)
+    border:   [215, 222, 235],  // color de líneas divisorias
+    accent:   [ 26,  79, 160],  // azul principal (encabezados de sección)
+    accentDk: [ 15,  50, 110],  // azul oscuro (borde izquierdo de sección)
+    accentLt: [219, 234, 254],  // azul claro (fondo de observaciones)
+    green:    [ 22, 163,  74],  // verde (valores "Sí", "Buena")
+    greenBg:  [240, 253, 244],  // fondo verde claro
+    red:      [220,  38,  38],  // rojo (valores "No", "Deficiente")
+    redBg:    [254, 242, 242],  // fondo rojo claro (alertas)
+    orange:   [161,  98,   7],  // naranja (valores "Regular")
+    headerBg: [ 12,  22,  48],  // fondo del encabezado principal (azul oscuro)
   };
 
+  // ── LECTURA DE VALORES DEL FORMULARIO ──
   const fechaVal  = document.getElementById('fecha').value || '—';
   const idVal     = document.getElementById('idCliente').value.trim() || '—';
   const vinetaVal = v('vineta');
 
-  function newPage() { doc.addPage(); y = 15; }
-  function chk(n = 20) { if (y + n > H - mB) newPage(); }
-  function sp(h = 4)   { y += h; }
+  // ── FUNCIONES INTERNAS DE NAVEGACIÓN ──
+  function newPage() { doc.addPage(); y = 15; }            // agrega nueva hoja y reinicia posición
+  function chk(n = 20) { if (y + n > H - mB) newPage(); } // revisa si hay espacio; si no, nueva hoja
+  function sp(h = 4)   { y += h; }                         // agrega espacio vertical en mm
 
-  // ══════════════════════════════════════════
-  // ENCABEZADO PROFESIONAL
-  // ══════════════════════════════════════════
-  const HDR = 44;
+  // ════════════════════════════════════════════════════════════════════
+  // ENCABEZADO DEL REPORTE (primera hoja)
+  // ════════════════════════════════════════════════════════════════════
+
+  const HDR = 44; // altura del bloque de encabezado en mm
+
+  // Fondo oscuro del encabezado
   doc.setFillColor(...C.headerBg);
   doc.rect(0, 0, W, HDR, 'F');
 
-  // Franja de color arriba
+  // Franja de color en la parte superior del encabezado
   doc.setFillColor(...C.accent);
   doc.rect(0, 0, W, 4, 'F');
 
-  // Logo
+  // ── TAMAÑO DEL LOGO ──
+  // Los cuatro últimos números son: posición X, posición Y, ancho, alto (en mm)
+  // Aumentá o disminuí el ancho/alto para ajustar el tamaño
   if (LOGO_DATA) {
-    try { doc.addImage(LOGO_DATA, 'JPEG', mL, 7, 30, 30); } catch(e) {}
+    try { doc.addImage(LOGO_DATA, 'JPEG', mL, 10, 23, 23); } catch(e) {}
   }
-  const tX = mL + (LOGO_DATA ? 34 : 0);
+  const tX = mL + (LOGO_DATA ? 28 : 0); // posición X del texto (después del logo)
 
+  // ── TEXTOS DEL ENCABEZADO ──
+  // Sub-título pequeño (arriba)
   doc.setTextColor(140, 175, 225);
   doc.setFontSize(7); doc.setFont('helvetica', 'bold');
-  doc.text('REPORTE DE VISITA DE CALIDAD', tX, 16);
+  doc.text('REPORTE DE VISITA DE CALIDAD', tX, 16); // ← podés cambiar este texto
 
+  // Título principal grande
   doc.setTextColor(...C.white);
   doc.setFontSize(15.5); doc.setFont('helvetica', 'bold');
-  doc.text('Auditoría de Instalación HFC', tX, 27);
+  doc.text('Auditoría de Instalación HFC', tX, 27); // ← podés cambiar este texto
 
-  // Badge solo ID CLIENTE (derecha) — fecha y nodo van en los datos del cliente
+  // ── BADGE ID CLIENTE (esquina superior derecha) ──
   const BW = 54, BH = 26, BX = W - mR - BW, BY = 10;
   doc.setFillColor(32, 78, 160);
   doc.roundedRect(BX, BY, BW, BH, 3, 3, 'F');
@@ -952,22 +985,25 @@ async function generatePDF() {
   doc.setFillColor(32, 78, 160);
   doc.rect(BX, BY + 9, BW, 3, 'F');
 
+  // Etiqueta del badge
   doc.setTextColor(170, 205, 255);
   doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
-  doc.text('ID CLIENTE', BX + BW / 2, BY + 8, { align: 'center' });
+  doc.text('ID CLIENTE', BX + BW / 2, BY + 8, { align: 'center' }); // ← podés cambiar 'ID CLIENTE'
 
+  // Valor del ID (se lee del formulario automáticamente)
   doc.setTextColor(...C.white);
   doc.setFontSize(idVal.length > 12 ? 8.5 : 13);
   doc.setFont('helvetica', 'bold');
   doc.text(idVal, BX + BW / 2, BY + 21, { align: 'center' });
 
-  y = HDR + 7;
+  y = HDR + 7; // la primera sección empieza aquí
 
-  // ══════════════════════════════════════════
-  // HELPERS
-  // ══════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // FUNCIONES DE DIBUJO (no necesitás tocarlas para editar campos)
+  // ════════════════════════════════════════════════════════════════════
 
-  // Encabezado de sección
+  // Dibuja el título de una sección (barra azul con número y nombre)
+  // Uso: secH(1, 'Nombre de sección')
   function secH(num, title) {
     chk(14);
     doc.setFillColor(...C.accent);
@@ -980,85 +1016,68 @@ async function generatePDF() {
     y += 9.5;
   }
 
-  // Línea horizontal separadora
+  // Dibuja línea horizontal separadora entre filas
   function hLine() {
     doc.setDrawColor(...C.border);
     doc.setLineWidth(0.25);
     doc.line(mL, y, mL + cW, y);
   }
 
-  const ROW_H = 8.5;
+  const ROW_H = 8.5; // altura de cada fila de datos en mm
   let rowIdx = 0;
-  function resetRows() { rowIdx = 0; }
+  function resetRows() { rowIdx = 0; } // reinicia el color alterno de filas
 
-  // Dibuja una celda de campo: etiqueta (izq) | valor (der)
+  // Dibuja una celda individual: etiqueta a la izquierda, valor a la derecha
+  // Colorea el valor automáticamente: verde=Sí, rojo=No, naranja=Regular
   function cell(x, cy, w, label, value) {
-    const lW  = w * 0.44;
-    const vX  = x + lW + 1.5;
-    const vW  = w - lW - 3;
-    const vs  = String(value || '—');
+    const lW = w * 0.44; // 44% del ancho para la etiqueta
+    const vX = x + lW + 1.5;
+    const vW = w - lW - 3;
+    const vs = String(value || '—');
 
     doc.setTextColor(...C.muted);
     doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
-    const lLines = doc.splitTextToSize(label, lW - 2);
-    doc.text(lLines[0], x + 3, cy + 5.5);
+    doc.text(doc.splitTextToSize(label, lW - 2)[0], x + 3, cy + 5.5);
 
+    // Color automático según el valor
     let vc = C.text;
-    if (vs === 'Sí' || vs === 'Si')       vc = C.green;
-    else if (vs === 'No')                  vc = C.red;
-    else if (vs.includes('Deficiente'))    vc = C.red;
-    else if (vs.includes('Regular'))       vc = C.orange;
-    else if (vs.includes('Buena'))         vc = C.green;
+    if (vs === 'Sí' || vs === 'Si')      vc = C.green;
+    else if (vs === 'No')                 vc = C.red;
+    else if (vs.includes('Deficiente'))   vc = C.red;
+    else if (vs.includes('Regular'))      vc = C.orange;
+    else if (vs.includes('Buena'))        vc = C.green;
 
     doc.setTextColor(...vc);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-    const vLines = doc.splitTextToSize(vs, vW);
-    doc.text(vLines[0], vX, cy + 5.5);
+    doc.text(doc.splitTextToSize(vs, vW)[0], vX, cy + 5.5);
   }
 
-  // Dibuja pares [[label,value],...] en 2 columnas por fila
+  // Dibuja una lista de pares [etiqueta, valor] en 2 columnas por fila
+  // Uso: rows([ ['Campo 1', valor1], ['Campo 2', valor2], ... ])
   function rows(pairs) {
     const mid = mL + c2W + GAP / 2;
     for (let i = 0; i < pairs.length; i += 2) {
       chk(ROW_H);
-      // Fondo alterno
       if (rowIdx % 2 === 1) {
         doc.setFillColor(...C.bg);
         doc.rect(mL, y, cW, ROW_H, 'F');
       }
-      // Divisor vertical central (solo si hay 2 celdas)
       if (i + 1 < pairs.length && pairs[i+1][0]) {
         doc.setDrawColor(...C.border);
         doc.setLineWidth(0.3);
         doc.line(mid, y + 1.5, mid, y + ROW_H - 1.5);
       }
-      // Celda izquierda
       if (pairs[i][0]) cell(mL, y, c2W, pairs[i][0], pairs[i][1]);
-      // Celda derecha
       if (i + 1 < pairs.length && pairs[i+1][0]) {
         cell(mL + c2W + GAP, y, c2W, pairs[i+1][0], pairs[i+1][1]);
       }
-      // Borde inferior
       hLine();
       y += ROW_H;
       rowIdx++;
     }
   }
 
-  // Fila completa (ancho total)
-  function rowFull(label, value) {
-    chk(ROW_H);
-    if (rowIdx % 2 === 1) {
-      doc.setFillColor(...C.bg);
-      doc.rect(mL, y, cW, ROW_H, 'F');
-    }
-    cell(mL, y, cW, label, value);
-    hLine();
-    y += ROW_H;
-    rowIdx++;
-  }
-
-  // Bloque de texto largo (observaciones, alertas)
+  // Bloque de texto libre con fondo de color (para observaciones)
   function textBlock(text, bgColor, accentColor) {
     if (!text) return;
     const lines = doc.splitTextToSize(text, cW - 14);
@@ -1076,7 +1095,7 @@ async function generatePDF() {
     y += bH + 4;
   }
 
-  // Micro-encabezado de sub-sección
+  // Sub-encabezado dentro de una sección (fondo gris, texto azul)
   function subH(title) {
     chk(8);
     doc.setFillColor(...C.bgAlt);
@@ -1090,81 +1109,86 @@ async function generatePDF() {
     y += 7;
   }
 
-  // ══════════════════════════════════════════
-  // SECCIÓN 1: DATOS DEL CLIENTE
-  // ══════════════════════════════════════════
-  secH(1, 'Datos del cliente');
+  // ════════════════════════════════════════════════════════════════════
+  // SECCIÓN 1 — DATOS DEL CLIENTE
+  // Para cambiar un nombre de campo: editá el texto entre comillas simples
+  // Ejemplo: 'ID Cliente' → 'Número de cliente'
+  // ════════════════════════════════════════════════════════════════════
+  secH(1, 'Datos del cliente'); // ← nombre de la sección
   resetRows();
   rows([
-    ['ID Cliente',     v('idCliente')],
-    ['Viñeta / Nodo',  vinetaVal !== '—' ? vinetaVal : '—'],
-    ['Fecha de auditoría', fechaVal],
+    ['ID Cliente',          v('idCliente')],   // ← 'ID Cliente' es la etiqueta visible en el PDF
+    ['Viñeta / Nodo',       vinetaVal !== '—' ? vinetaVal : '—'],
+    ['Fecha de auditoría',  fechaVal],
   ]);
 
-  // Observaciones
+  // Bloque de observaciones generales (texto libre del formulario)
   const obs = obsEl.value.trim();
   if (obs) {
     sp(5);
-    subH('Observaciones generales');
+    subH('Observaciones generales'); // ← podés cambiar este sub-título
     textBlock(obs, [235, 243, 255], C.accent);
   }
 
-  // ══════════════════════════════════════════
-  // SECCIÓN 2: CABLE MODEM Y STB
-  // ══════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // SECCIÓN 2 — CABLE MODEM Y STB
+  // ════════════════════════════════════════════════════════════════════
   sp(3);
-  secH(2, 'Cable Modem y STB');
+  secH(2, 'Cable Modem y STB'); // ← nombre de la sección
   resetRows();
   const snAll = getSNList().map(s => s.val).filter(x => x && x !== '—').join(', ') || '—';
   rows([
-    ['Modelo / MAC CM',       v('modeloCM')],
-    ['Velocidad contratada',  getGroupVal('velocidad')],
-    ['Cantidad de STB',       getGroupVal('cantStb')],
-    ['S/N Decodificadores',   snAll],
+    ['Modelo / MAC CM',      v('modeloCM')],
+    ['Velocidad contratada', getGroupVal('velocidad')],
+    ['Cantidad de STB',      getGroupVal('cantStb')],
+    ['S/N Decodificadores',  snAll],
   ]);
 
-  // ══════════════════════════════════════════
-  // SECCIÓN 3: CABLEADO Y CONECTORES
-  // ══════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // SECCIÓN 3 — CABLEADO Y CONECTORES
+  // ════════════════════════════════════════════════════════════════════
   sp(3);
-  secH(3, 'Cableado y conectores');
+  secH(3, 'Cableado y conectores'); // ← nombre de la sección
   resetRows();
-  const extVal = metroEsNA ? 'N/A — visita no realizada' : (v('metroExt') !== '—' ? v('metroExt') + ' m' : '—');
+  const extVal = metroEsNA
+    ? 'N/A — visita no realizada'
+    : (v('metroExt') !== '—' ? v('metroExt') + ' m' : '—');
   const intVal = v('metroInt') !== '—' ? v('metroInt') + ' m' : '—';
   rows([
-    ['Cable utilizado externo', extVal],
-    ['Cable utilizado interno',  intVal],
-    ['Conectores F',             getGroupVal('conectoresF')],
-    ['Grapas utilizadas',        v('grapas')],
+    ['Cable utilizado externo', extVal],    // ← etiqueta editable
+    ['Cable utilizado interno', intVal],    // ← etiqueta editable
+    ['Conectores F',            getGroupVal('conectoresF')],
+    ['Grapas utilizadas',       v('grapas')],
   ]);
 
-  // ══════════════════════════════════════════
-  // SECCIÓN 4: ACCESORIOS DE RED
-  // ══════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // SECCIÓN 4 — ACCESORIOS DE RED
+  // ════════════════════════════════════════════════════════════════════
   sp(3);
-  secH(4, 'Accesorios de red');
+  secH(4, 'Accesorios de red'); // ← nombre de la sección
   resetRows();
   const fanValStr = document.getElementById('fanVal')?.value?.trim() || '';
   const fanFull   = getGroupVal('fan') + (fanValStr ? ' — ' + fanValStr : '');
   rows([
-    ['Clamp Cut',         getGroupVal('clampcut')],
-    ['Mástil',            getGroupVal('mastil')],
-    ['Isolator',          getGroupVal('isolador')],
-    ['FAN / Atenuador',   fanFull],
-    ['Splitters (cant.)', getGroupVal('cantSplitters')],
+    ['Clamp Cut',          getGroupVal('clampcut')],
+    ['Mástil',             getGroupVal('mastil')],
+    ['Isolator',           getGroupVal('isolador')],
+    ['FAN / Atenuador',    fanFull],
+    ['Splitters (cant.)',  getGroupVal('cantSplitters')],
   ]);
 
-  // Detalle de splitters
+  // Detalle de cada splitter (se genera automáticamente según cuántos haya)
   const splittersData = getSplittersData();
   if (splittersData.length > 0) {
     sp(3);
-    subH('Detalle de splitters');
+    subH('Detalle de splitters'); // ← podés cambiar este sub-título
     resetRows();
     splittersData.forEach(s => {
       rows([
         [`Splitter ${s.num} — Tipo`,         s.tipo],
         [`Splitter ${s.num} — Terminadores`, s.term],
       ]);
+      // Alerta roja si faltan terminadores
       if (s.coment) {
         const warnLines = doc.splitTextToSize('⚠  Sin terminadores: ' + s.coment, cW - 10);
         const wH = warnLines.length * 5 + 7;
@@ -1182,42 +1206,64 @@ async function generatePDF() {
     });
   }
 
-  // ══════════════════════════════════════════
-  // SECCIÓN 5: CALIDAD DE INSTALACIÓN
-  // ══════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // SECCIÓN 5 — CALIDAD DE INSTALACIÓN
+  // ════════════════════════════════════════════════════════════════════
   sp(3);
-  secH(5, 'Calidad de instalación');
+  secH(5, 'Calidad de instalación'); // ← nombre de la sección
   resetRows();
   rows([
     ['Instalación estética', getGroupVal('estetica')],
     ['Calificación general', getGroupVal('calificacion')],
   ]);
 
-  // ══════════════════════════════════════════
-  // CAMPOS ADICIONALES
-  // ══════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // CAMPOS ADICIONALES (los que agregás con el botón "+ Agregar campo")
+  // Se anexan sin encabezado propio, después de la sección 5
+  // El texto largo hace wrap automáticamente
+  // ════════════════════════════════════════════════════════════════════
   const extraActivos = extraFields.filter(f => f.label);
   if (extraActivos.length > 0) {
     sp(3);
-    secH('', 'Campos adicionales');
     resetRows();
-    const ep = extraActivos.map(f => [f.label, f.value || '—']);
-    rows(ep);
+    extraActivos.forEach(f => {
+      const vs     = String(f.value || '—');
+      const lW     = cW * 0.30; // 30% para la etiqueta, 70% para el valor
+      const vX     = mL + lW + 3;
+      const vW     = cW - lW - 6;
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+      const vLines = doc.splitTextToSize(vs, vW);
+      const rH     = Math.max(ROW_H, vLines.length * 5.4 + 5); // altura dinámica
+      chk(rH);
+      if (rowIdx % 2 === 1) {
+        doc.setFillColor(...C.bg);
+        doc.rect(mL, y, cW, rH, 'F');
+      }
+      doc.setTextColor(...C.muted);
+      doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
+      doc.text(f.label, mL + 3, y + 5.5);
+      doc.setTextColor(...C.text);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+      doc.text(vLines, vX, y + 5.5);
+      hLine();
+      y += rH;
+      rowIdx++;
+    });
   }
 
-  // ══════════════════════════════════════════
-  // FOTOS — 2 POR FILA
-  // ══════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // FOTOGRAFÍAS DE AUDITORÍA (nueva página, 2 fotos por fila)
+  // ════════════════════════════════════════════════════════════════════
   if (photos.length > 0) {
     newPage();
-    secH('', 'Fotografías de auditoría');
+    secH('', 'Fotografías de auditoría'); // ← nombre de la sección de fotos
     sp(4);
 
-    const PG  = 6;              // gap entre fotos
-    const PW  = (cW - PG) / 2; // ancho de columna de foto
-    const MH  = 110;            // alto máximo por foto
+    const PG = 6;               // espacio entre las dos columnas de fotos (mm)
+    const PW = (cW - PG) / 2;  // ancho de cada foto en mm
+    const MH = 110;             // alto máximo permitido por foto en mm
 
-    // Calcula dimensiones respetando relación de aspecto dentro de maxW × maxH
+    // Calcula dimensiones manteniendo la relación de aspecto original
     function fitImg(nW, nH, maxW, maxH) {
       const ratio = nW / nH;
       let w = maxW, h = maxW / ratio;
@@ -1237,34 +1283,35 @@ async function generatePDF() {
         d2 = fitImg(img2.naturalWidth, img2.naturalHeight, PW - 2, MH);
       }
 
-      const rowH = Math.max(d1.h, d2 ? d2.h : 0);
+      const rowH  = Math.max(d1.h, d2 ? d2.h : 0);
       const hasCap1 = photos[i].caption;
       const hasCap2 = i + 1 < photos.length && photos[i+1].caption;
-      const capH = (hasCap1 || hasCap2) ? 11 : 0;
-      chk(rowH + capH + 14);
+      chk(rowH + (hasCap1 || hasCap2 ? 11 : 0) + 14);
 
-      // Foto 1 — centrada horizontal y verticalmente en su columna
+      // Foto izquierda — centrada en su columna
       const x1 = mL;
       doc.setFillColor(238, 241, 247);
       doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
       doc.roundedRect(x1, y, PW, rowH + 4, 2, 2, 'FD');
-      const ox1 = x1 + 1 + (PW - 2 - d1.w) / 2;  // centrado horizontal
-      const oy1 = y  + 2 + (rowH - d1.h) / 2;      // centrado vertical
-      try { doc.addImage(photos[i].dataUrl, 'JPEG', ox1, oy1, d1.w, d1.h); } catch(e) {}
-      // Badge
+      try { doc.addImage(photos[i].dataUrl, 'JPEG',
+        x1 + 1 + (PW - 2 - d1.w) / 2,  // centrado horizontal
+        y  + 2 + (rowH - d1.h) / 2,     // centrado vertical
+        d1.w, d1.h); } catch(e) {}
+      // Badge F1, F2, F3...
       doc.setFillColor(...C.accent);
       doc.roundedRect(x1 + 2, y + 2, 11, 6.5, 1.5, 1.5, 'F');
       doc.setTextColor(...C.white); doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
       doc.text('F' + (i + 1), x1 + 7.5, y + 6.7, { align: 'center' });
 
-      // Foto 2 — centrada en su columna
+      // Foto derecha — centrada en su columna
       if (d2) {
         const x2 = mL + PW + PG;
         doc.setFillColor(238, 241, 247);
         doc.roundedRect(x2, y, PW, rowH + 4, 2, 2, 'FD');
-        const ox2 = x2 + 1 + (PW - 2 - d2.w) / 2;
-        const oy2 = y  + 2 + (rowH - d2.h) / 2;
-        try { doc.addImage(photos[i+1].dataUrl, 'JPEG', ox2, oy2, d2.w, d2.h); } catch(e) {}
+        try { doc.addImage(photos[i+1].dataUrl, 'JPEG',
+          x2 + 1 + (PW - 2 - d2.w) / 2,
+          y  + 2 + (rowH - d2.h) / 2,
+          d2.w, d2.h); } catch(e) {}
         doc.setFillColor(...C.accent);
         doc.roundedRect(x2 + 2, y + 2, 11, 6.5, 1.5, 1.5, 'F');
         doc.setTextColor(...C.white); doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
@@ -1273,7 +1320,7 @@ async function generatePDF() {
 
       y += rowH + 6;
 
-      // Pies de foto
+      // Pies de foto (caption que escribiste en el formulario)
       if (hasCap1 || hasCap2) {
         doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
         if (hasCap1) {
@@ -1292,17 +1339,18 @@ async function generatePDF() {
     }
   }
 
-  // ══════════════════════════════════════════
-  // MEDICIONES — 2 POR FILA
-  // ══════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // MEDICIONES / NIVELES DE SEÑAL (nueva página, 2 imágenes por fila)
+  // Sin badges de numeración (M1, M2...) — solo las imágenes y sus captions
+  // ════════════════════════════════════════════════════════════════════
   if (mediciones.length > 0) {
     newPage();
-    secH('', 'Mediciones / Niveles de señal');
+    secH('', 'Mediciones / Niveles de señal'); // ← nombre de la sección de mediciones
     sp(4);
 
-    const MG  = 6;
-    const MW  = (cW - MG) / 2;
-    const MMH = 110;
+    const MG  = 6;              // espacio entre columnas (mm)
+    const MW  = (cW - MG) / 2; // ancho de cada imagen
+    const MMH = 110;            // alto máximo por imagen (mm)
 
     function fitImgM(nW, nH, maxW, maxH) {
       const ratio = nW / nH;
@@ -1323,37 +1371,35 @@ async function generatePDF() {
         d2 = fitImgM(m2.naturalWidth, m2.naturalHeight, MW - 2, MMH);
       }
 
-      const rowH = Math.max(d1.h, d2 ? d2.h : 0);
+      const rowH  = Math.max(d1.h, d2 ? d2.h : 0);
       const hasCap1 = mediciones[i].caption;
       const hasCap2 = i + 1 < mediciones.length && mediciones[i+1].caption;
       chk(rowH + 14);
 
+      // Imagen izquierda — fondo verde claro, centrada
       const x1 = mL;
       doc.setFillColor(238, 247, 241);
       doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
       doc.roundedRect(x1, y, MW, rowH + 4, 2, 2, 'FD');
-      const ox1 = x1 + 1 + (MW - 2 - d1.w) / 2;
-      const oy1 = y  + 2 + (rowH - d1.h) / 2;
-      try { doc.addImage(mediciones[i].dataUrl, 'JPEG', ox1, oy1, d1.w, d1.h); } catch(e) {}
-      doc.setFillColor(...C.green);
-      doc.roundedRect(x1 + 2, y + 2, 11, 6.5, 1.5, 1.5, 'F');
-      doc.setTextColor(...C.white); doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
-      doc.text('M' + (i + 1), x1 + 7.5, y + 6.7, { align: 'center' });
+      try { doc.addImage(mediciones[i].dataUrl, 'JPEG',
+        x1 + 1 + (MW - 2 - d1.w) / 2,
+        y  + 2 + (rowH - d1.h) / 2,
+        d1.w, d1.h); } catch(e) {}
 
+      // Imagen derecha — centrada
       if (d2) {
         const x2 = mL + MW + MG;
         doc.setFillColor(238, 247, 241);
         doc.roundedRect(x2, y, MW, rowH + 4, 2, 2, 'FD');
-        const ox2 = x2 + 1 + (MW - 2 - d2.w) / 2;
-        const oy2 = y  + 2 + (rowH - d2.h) / 2;
-        try { doc.addImage(mediciones[i+1].dataUrl, 'JPEG', ox2, oy2, d2.w, d2.h); } catch(e) {}
-        doc.setFillColor(...C.green);
-        doc.roundedRect(x2 + 2, y + 2, 11, 6.5, 1.5, 1.5, 'F');
-        doc.setTextColor(...C.white); doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
-        doc.text('M' + (i + 2), x2 + 7.5, y + 6.7, { align: 'center' });
+        try { doc.addImage(mediciones[i+1].dataUrl, 'JPEG',
+          x2 + 1 + (MW - 2 - d2.w) / 2,
+          y  + 2 + (rowH - d2.h) / 2,
+          d2.w, d2.h); } catch(e) {}
       }
 
       y += rowH + 6;
+
+      // Captions de las mediciones
       if (hasCap1 || hasCap2) {
         doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
         if (hasCap1) {
@@ -1372,32 +1418,32 @@ async function generatePDF() {
     }
   }
 
-  // ══════════════════════════════════════════
-  // PIE DE PÁGINA EN TODAS LAS HOJAS
-  // ══════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // PIE DE PÁGINA (aparece en todas las hojas)
+  // ════════════════════════════════════════════════════════════════════
   const totalPgs = doc.internal.getNumberOfPages();
   const idClean  = idVal.replace(/\s+/g, '-');
   for (let pg = 1; pg <= totalPgs; pg++) {
     doc.setPage(pg);
-    // Fondo del pie
     doc.setFillColor(...C.bg);
     doc.rect(0, H - mB, W, mB, 'F');
     doc.setFillColor(...C.accent);
     doc.rect(0, H - mB, W, 0.9, 'F');
-    // Texto pie izquierda
     doc.setTextColor(...C.muted);
     doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+    // ── TEXTO DEL PIE DE PÁGINA ──
+    // Podés cambiar el texto entre comillas, los valores de fecha e ID se agregan automáticamente
     doc.text('Visita Calidad HFC  ·  ' + fechaVal + '  ·  ID: ' + idVal, mL, H - 5.5);
-    // Página
     doc.setFont('helvetica', 'bold');
     doc.text('Página ' + pg + ' / ' + totalPgs, W - mR, H - 5.5, { align: 'right' });
   }
 
-  // ── GUARDAR / ABRIR ──
+  // ── GUARDAR Y ABRIR EL PDF ──
   const blob = doc.output('blob');
   const url  = URL.createObjectURL(blob);
   window.open(url, '_blank');
   showToast('PDF listo — guardalo desde el navegador');
+  // Nombre del archivo descargado: "reporte - ID XXXXX.pdf"
   const nombreArchivo = 'reporte - ID ' + idClean + '.pdf';
   const a = document.createElement('a');
   a.href = url; a.download = nombreArchivo; a.click();
