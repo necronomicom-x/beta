@@ -301,6 +301,11 @@ textarea{resize:vertical;min-height:80px;line-height:1.5}
     </div>
 
     <div class="field">
+      <label class="field-label"><span class="field-dot"></span>Comentarios de cableado <span style="font-weight:400;color:var(--muted);font-size:12px">(opcional)</span></label>
+      <textarea id="comentCable" placeholder="Observaciones sobre el cableado, tipo de cable, condiciones, etc." rows="3" style="width:100%;border:1.5px solid var(--border2);border-radius:12px;padding:12px;font-size:15px;font-family:inherit;resize:vertical;background:#fafafa;color:var(--text);box-sizing:border-box;transition:border .2s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"></textarea>
+    </div>
+
+    <div class="field">
       <label class="field-label"><span class="field-dot"></span>Clamp Cut</label>
       <div class="pill-group" id="clampcut">
         <div class="pill" onclick="selectPill(this,'clampcut')">✅ Sí</div>
@@ -969,12 +974,12 @@ async function generatePDF() {
   // Sub-título pequeño (arriba)
   doc.setTextColor(140, 175, 225);
   doc.setFontSize(7); doc.setFont('helvetica', 'bold');
-  doc.text('VISITAS DE AUDITORÍA', tX, 16); // ← podés cambiar este texto
+  doc.text('REPORTE DE VISITA DE CALIDAD', tX, 16); // ← podés cambiar este texto
 
   // Título principal grande
   doc.setTextColor(...C.white);
   doc.setFontSize(15.5); doc.setFont('helvetica', 'bold');
-  doc.text('REPORTE DE VISITA DE CALIDAD', tX, 27); // ← podés cambiar este texto
+  doc.text('Auditoría de Instalación HFC', tX, 27); // ← podés cambiar este texto
 
   // ── BADGE ID CLIENTE (esquina superior derecha) ──
   const BW = 54, BH = 26, BX = W - mR - BW, BY = 10;
@@ -1160,6 +1165,12 @@ async function generatePDF() {
     ['Conectores F',            getGroupVal('conectoresF')],
     ['Grapas utilizadas',       v('grapas')],
   ]);
+  // Comentario de cableado — solo aparece si se completó (campo opcional)
+  const comentCableVal = document.getElementById('comentCable')?.value?.trim();
+  if (comentCableVal) {
+    sp(2);
+    textBlock(comentCableVal, [237, 242, 252], C.accent);
+  }
 
   // ════════════════════════════════════════════════════════════════════
   // SECCIÓN 4 — ACCESORIOS DE RED
@@ -1556,6 +1567,8 @@ function recopilarDatos() {
     'S/N Decos':           getSNList().map(s => s.val).filter(x=>x!=='—').join(', ') || '—',
     'Cable externo (m)':   metroEsNA ? 'N/A' : (v('metroExt') || '—'),
     'Cable interno (m)':   v('metroInt'),
+    'Comentarios cableado': document.getElementById('comentCable')?.value?.trim() || '—',
+    'Coment. cableado':    document.getElementById('comentCable')?.value?.trim() || '—',
     'Conectores F':        getGroupVal('conectoresF'),
     'Grapas':              v('grapas'),
     'Clamp Cut':           getGroupVal('clampcut'),
@@ -1727,6 +1740,7 @@ function guardarBorrador() {
       metroExt:     document.getElementById('metroExt')?.value || '',
       metroInt:     document.getElementById('metroInt')?.value || '',
       grapas:       document.getElementById('grapas')?.value || '',
+      comentCable:  document.getElementById('comentCable')?.value || '',
       fanVal:       document.getElementById('fanVal')?.value || '',
       metroEsNA,
       // S/N list
@@ -1770,6 +1784,7 @@ function restaurarBorrador() {
     setVal('metroExt', draft.metroExt);
     setVal('metroInt', draft.metroInt);
     setVal('grapas', draft.grapas);
+    if (draft.comentCable !== undefined) { const el = document.getElementById('comentCable'); if(el) el.value = draft.comentCable; }
     setVal('fanVal', draft.fanVal);
 
     // Metro N/A
