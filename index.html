@@ -945,9 +945,7 @@ async function generatePDF() {
   doc.setTextColor(140,175,225);
   doc.setFontSize(7); doc.setFont('helvetica','bold');
   doc.text('REPORTE DE VISITA DE CALIDAD', tX, 16);
-  doc.setTextColor(...C.white);
-  doc.setFontSize(15.5); doc.setFont('helvetica','bold');
-  doc.text('Auditoría de Instalación HFC', tX, 27);
+  // Título principal suprimido por solicitud
 
   // ── BADGE ID CLIENTE ──
   const BW = 54, BH = 26, BX = W - mR - BW, BY = 10;
@@ -1451,6 +1449,7 @@ function recopilarDatos() {
     'Fecha':               v('fecha'),
     'ID Cliente':          v('idCliente'),
     'Viñeta / Nodo':       v('vineta'),
+    'Observaciones':       v('observaciones'),
     'Marca CM':            getGroupVal('marcaCM'),
     'Modelo / MAC':        v('modeloCM'),
     'Velocidad':           getGroupVal('velocidad'),
@@ -1468,7 +1467,6 @@ function recopilarDatos() {
     'FAN / Atenuador':     getGroupVal('fan') + (fanValStr ? ' — '+fanValStr : ''),
     'Estética':            getGroupVal('estetica'),
     'Calificación':        getGroupVal('calificacion'),
-    'Observaciones':       v('observaciones'),
     'Fotos':               photos.length + ' foto(s)',
     'Mediciones':          mediciones.length + ' archivo(s)',
   };
