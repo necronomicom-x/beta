@@ -190,6 +190,14 @@ textarea{resize:vertical;min-height:80px;line-height:1.5}
       <input type="date" id="fecha">
     </div>
 
+    <div class="field">
+      <label class="field-label"><span class="field-dot"></span>Visita efectiva</label>
+      <div class="pill-group" id="visitaEfectiva">
+        <div class="pill" onclick="selectSiNo(this,'visitaEfectiva','si')">✅ Sí</div>
+        <div class="pill" onclick="selectSiNo(this,'visitaEfectiva','no')">❌ No</div>
+      </div>
+    </div>
+
     <div class="field" id="fieldObservaciones">
       <label class="field-label"><span class="field-dot"></span>Observaciones generales<span class="required-star">*</span></label>
       <textarea id="observaciones" placeholder="Hallazgos, anomalías, recomendaciones..." rows="4"></textarea>
@@ -502,15 +510,45 @@ let fotosDB = null;
 
 function abrirDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('visitaCalidadDB', 1);
+    // Versión 2: agrega el store 'borrador' para guardar el formulario en IndexedDB
+    // (más confiable que localStorage, que algunos navegadores —ej. Safari— pueden limpiar solos)
+    const req = indexedDB.open('visitaCalidadDB', 2);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('fotos')) db.createObjectStore('fotos', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('mediciones')) db.createObjectStore('mediciones', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('borrador')) db.createObjectStore('borrador', { keyPath: 'id' });
     };
     req.onsuccess = e => { fotosDB = e.target.result; resolve(fotosDB); };
     req.onerror = () => reject(req.error);
   });
+}
+
+// ── Guardar / leer / limpiar el borrador del formulario en IndexedDB ──
+async function guardarBorradorDB(draft) {
+  if (!fotosDB) return;
+  try {
+    const tx = fotosDB.transaction('borrador', 'readwrite');
+    tx.objectStore('borrador').put({ id: 'draft', data: draft });
+  } catch(e) {}
+}
+async function leerBorradorDB() {
+  if (!fotosDB) return null;
+  return new Promise(resolve => {
+    try {
+      const tx = fotosDB.transaction('borrador', 'readonly');
+      const req = tx.objectStore('borrador').get('draft');
+      req.onsuccess = () => resolve(req.result ? req.result.data : null);
+      req.onerror  = () => resolve(null);
+    } catch(e) { resolve(null); }
+  });
+}
+async function limpiarBorradorDB() {
+  if (!fotosDB) return;
+  try {
+    const tx = fotosDB.transaction('borrador', 'readwrite');
+    tx.objectStore('borrador').clear();
+  } catch(e) {}
 }
 
 async function guardarFotosDB(arr, store) {
@@ -1074,6 +1112,7 @@ async function generatePDF() {
     ['ID Cliente',         v('idCliente')],
     ['Viñeta / Nodo',      v('vineta') !== '—' ? v('vineta') : '—'],
     ['Fecha de auditoría', fechaVal],
+    ['Visita efectiva',    getGroupVal('visitaEfectiva')],
   ]);
   const obs = obsEl.value.trim();
   if (obs) { sp(5); subH('Observaciones generales'); textBlock(obs,[235,243,255],C.accent); }
@@ -1112,8 +1151,6 @@ async function generatePDF() {
     ['Conectores F',             getGroupVal('conectoresF')],
     ['Grapas utilizadas',        v('grapas')],
   ]);
-  const comentCableVal = document.getElementById('comentCable')?.value?.trim();
-  if (comentCableVal) { sp(2); textBlock(comentCableVal, [237,242,252], C.accent); }
 
   // ══════════════════════════════════════════
   // SECCIÓN 4 — ACCESORIOS DE RED
@@ -1339,13 +1376,19 @@ async function generatePDF() {
     doc.text('Página ' + pg + ' / ' + totalPgs, W-mR, H-5.5, { align:'right' });
   }
 
-  // ── GUARDAR ──
+  // ── AGREGAR AUTOMÁTICAMENTE AL EXCEL DEL DÍA ──
+  // (los campos ya se validaron al inicio de esta función)
+  agregarAlExcelInterno();
+
+  // ── GUARDAR Y DESCARGAR EL PDF ──
+  // Nombre del archivo: "visita {fecha}.pdf" — si hacés varias visitas el mismo día,
+  // el navegador agrega automáticamente (1), (2)... para no sobrescribir
   const blob = doc.output('blob');
   const url  = URL.createObjectURL(blob);
   window.open(url, '_blank');
-  showToast('PDF listo — guardalo desde el navegador');
+  showToast('✅ PDF listo y agregado al Excel del día');
   const a = document.createElement('a');
-  a.href = url; a.download = 'reporte - ID ' + idClean + '.pdf'; a.click();
+  a.href = url; a.download = 'visita ' + fechaVal + '.pdf'; a.click();
 }
 
 // ─── METRO N/A ───
@@ -1445,18 +1488,22 @@ function recopilarDatos() {
     `Splitter ${s.num}: ${s.tipo} | Term: ${s.term}${s.coment ? ' ⚠️ '+s.coment : ''}`
   ).join(' / ');
 
+  // ── ORDEN Y NOMBRES DE COLUMNAS DEL EXCEL ──
+  // El orden de este objeto es el orden de las columnas en el Excel.
+  // Para cambiar un nombre de columna, editá el texto entre comillas (lado izquierdo).
   return {
     'Fecha':               v('fecha'),
     'ID Cliente':          v('idCliente'),
-    'Viñeta / Nodo':       v('vineta'),
+    'Nodo':                v('vineta'),
     'Observaciones':       v('observaciones'),
     'Marca CM':            getGroupVal('marcaCM'),
-    'Modelo / MAC':        v('modeloCM'),
+    'Model CM':            v('modeloCM'),
+    'Visita Efectiva':     getGroupVal('visitaEfectiva'),
     'Velocidad':           getGroupVal('velocidad'),
     'Cantidad STB':        getGroupVal('cantStb'),
     'S/N Decos':           getSNList().map(s => s.val).filter(x=>x!=='—').join(', ') || '—',
-    'Cable externo (m)':   metroEsNA ? 'N/A' : (v('metroExt') || '—'),
-    'Cable interno (m)':   v('metroInt'),
+    'Acometida ext (m)':   metroEsNA ? 'N/A' : (v('metroExt') || '—'),
+    'Conexiones int (m)':  v('metroInt'),
     'Conectores F':        getGroupVal('conectoresF'),
     'Grapas':              v('grapas'),
     'Clamp Cut':           getGroupVal('clampcut'),
@@ -1472,27 +1519,33 @@ function recopilarDatos() {
   };
 }
 
+// Hace el trabajo real de agregar/actualizar la visita en el Excel del día
+// (sin mostrar toast — se usa tanto desde el botón manual como desde generatePDF)
+function agregarAlExcelInterno() {
+  const visitas = getVisitas();
+  const datos = recopilarDatos();
+  const existe = visitas.findIndex(v => v['ID Cliente'] === datos['ID Cliente']);
+  const yaExistia = existe >= 0;
+  if (yaExistia) {
+    visitas[existe] = datos; // actualizar si ya existe
+  } else {
+    visitas.push(datos);
+  }
+  saveVisitas(visitas);
+  renderVisitasList();
+  return yaExistia;
+}
+
+// Botón manual "Agregar al Excel" — valida y muestra su propio toast
 function agregarAlExcel() {
-  // Validar campos obligatorios primero
   const idOk = document.getElementById('idCliente').value.trim();
   const obsOk = document.getElementById('observaciones').value.trim();
   if (!idOk || !obsOk) {
     showToast('⚠️ Completá los campos obligatorios primero');
     return;
   }
-  const visitas = getVisitas();
-  const datos = recopilarDatos();
-  // Verificar si ya existe este ID en el día
-  const existe = visitas.findIndex(v => v['ID Cliente'] === datos['ID Cliente']);
-  if (existe >= 0) {
-    visitas[existe] = datos; // actualizar si ya existe
-    showToast('✅ Visita actualizada en el Excel');
-  } else {
-    visitas.push(datos);
-    showToast('✅ Visita agregada al Excel del día');
-  }
-  saveVisitas(visitas);
-  renderVisitasList();
+  const yaExistia = agregarAlExcelInterno();
+  showToast(yaExistia ? '✅ Visita actualizada en el Excel' : '✅ Visita agregada al Excel del día');
 }
 
 function renderVisitasList() {
@@ -1530,19 +1583,6 @@ function limpiarVisitas() {
   showToast('Visitas del día eliminadas');
 }
 
-function exportarExcel() {
-  const visitas = getVisitas();
-  if (!visitas.length) { showToast('No hay visitas para exportar'); return; }
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(visitas);
-  // Ancho de columnas
-  const cols = Object.keys(visitas[0]).map(k => ({ wch: Math.max(k.length, 18) }));
-  ws['!cols'] = cols;
-  XLSX.utils.book_append_sheet(wb, ws, 'Visitas');
-  const fecha = visitas[0]['Fecha'] || new Date().toISOString().split('T')[0];
-  XLSX.writeFile(wb, `visitas_${fecha}.xlsx`);
-  showToast('📊 Excel exportado');
-}
 // ─── EXCEL ACUMULADO (una pestaña por día) ───
 const EXCEL_STORAGE_KEY = 'excel_acumulado';
 
@@ -1613,53 +1653,68 @@ function limpiarExcelAcumulado() {
 }
 
 // ─── BORRADOR AUTOMÁTICO ───
+// Se guarda en IndexedDB (igual que las fotos, sobrevive cierres del navegador)
+// y también en localStorage como respaldo rápido.
 const DRAFT_KEY = 'borrador_visita';
+
+function armarDraft() {
+  const draft = {
+    // Campos de texto
+    idCliente:     document.getElementById('idCliente')?.value || '',
+    vineta:        document.getElementById('vineta')?.value || '',
+    fecha:         document.getElementById('fecha')?.value || '',
+    observaciones: document.getElementById('observaciones')?.value || '',
+    modeloCM:      document.getElementById('modeloCM')?.value || '',
+    metroExt:      document.getElementById('metroExt')?.value || '',
+    metroInt:      document.getElementById('metroInt')?.value || '',
+    grapas:        document.getElementById('grapas')?.value || '',
+    fanVal:        document.getElementById('fanVal')?.value || '',
+    metroEsNA,
+    // S/N list
+    snList: getSNList().map(s => s.val),
+    // Pills — guardar el texto del que está seleccionado en cada grupo
+    pills: {},
+    // Campos "otro"
+    otros: {},
+  };
+
+  // ── GRUPOS DE PILLS QUE SE GUARDAN ──
+  // Si agregás un nuevo campo de pills al formulario, sumalo a esta lista
+  const grupos = ['velocidad','marcaCM','visitaEfectiva','cantStb','cantSplitters','conectoresF','isolador',
+                  'clampcut','mastil','fan','estetica','calificacion'];
+  grupos.forEach(gid => {
+    const sel = document.querySelector(`#${gid} .pill.selected, #${gid} .pill.si, #${gid} .pill.no`);
+    draft.pills[gid] = sel ? sel.innerText.trim() : '';
+    const otroEl = document.getElementById(gid + '_otherVal');
+    if (otroEl) draft.otros[gid] = otroEl.value || '';
+  });
+
+  // Campos extra (los que se agregan con el botón "+ Agregar campo")
+  draft.extraFields = extraFields.map(f => ({ ...f }));
+
+  return draft;
+}
 
 function guardarBorrador() {
   try {
-    const draft = {
-      // Campos de texto
-      idCliente:    document.getElementById('idCliente')?.value || '',
-      vineta:       document.getElementById('vineta')?.value || '',
-      fecha:        document.getElementById('fecha')?.value || '',
-      observaciones:document.getElementById('observaciones')?.value || '',
-      marcaCM:      getGroupVal('marcaCM'),
-      modeloCM:     document.getElementById('modeloCM')?.value || '',
-      metroExt:     document.getElementById('metroExt')?.value || '',
-      metroInt:     document.getElementById('metroInt')?.value || '',
-      grapas:       document.getElementById('grapas')?.value || '',
-      fanVal:       document.getElementById('fanVal')?.value || '',
-      metroEsNA,
-      // S/N list
-      snList: getSNList().map(s => s.val),
-      // Pills — guardar texto del seleccionado
-      pills: {},
-      // Campos "otro"
-      otros: {},
-    };
-
-    // Guardar pills seleccionados
-    const grupos = ['velocidad','marcaCM','cantStb','cantSplitters','conectoresF','isolador',
-                    'clampcut','mastil','fan','estetica','calificacion'];
-    grupos.forEach(gid => {
-      const sel = document.querySelector(`#${gid} .pill.selected, #${gid} .pill.si, #${gid} .pill.no`);
-      draft.pills[gid] = sel ? sel.innerText.trim() : '';
-      const otroEl = document.getElementById(gid + '_otherVal');
-      if (otroEl) draft.otros[gid] = otroEl.value || '';
-    });
-
-    // Campos extra
-    draft.extraFields = extraFields.map(f => ({ ...f }));
-
+    const draft = armarDraft();
+    // Guardado principal en IndexedDB (más resistente)
+    guardarBorradorDB(draft);
+    // Respaldo rápido en localStorage
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
   } catch(e) {}
 }
 
-function restaurarBorrador() {
+async function restaurarBorrador() {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return;
-    const draft = JSON.parse(raw);
+    // Buscar primero en IndexedDB (más confiable); si no hay, usar localStorage
+    let draft = await leerBorradorDB();
+    if (!draft) {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      draft = JSON.parse(raw);
+    }
+    if (!draft) return;
 
     // Restaurar campos de texto
     const setVal = (id, val) => { const el = document.getElementById(id); if(el && val) el.value = val; };
@@ -1667,7 +1722,6 @@ function restaurarBorrador() {
     setVal('vineta', draft.vineta);
     setVal('fecha', draft.fecha);
     setVal('observaciones', draft.observaciones);
-    if (draft.marcaCM) restoreGroupVal('marcaCM', draft.marcaCM);
     setVal('modeloCM', draft.modeloCM);
     setVal('metroExt', draft.metroExt);
     setVal('metroInt', draft.metroInt);
@@ -1687,7 +1741,7 @@ function restaurarBorrador() {
       });
     }
 
-    // Pills
+    // Pills — esto restaura TODOS los grupos (incluye marcaCM, velocidad, visitaEfectiva, etc.)
     if (draft.pills) {
       Object.entries(draft.pills).forEach(([gid, texto]) => {
         if (!texto) return;
@@ -1721,6 +1775,7 @@ function restaurarBorrador() {
 
 function limpiarBorrador() {
   localStorage.removeItem(DRAFT_KEY);
+  limpiarBorradorDB();
 }
 
 // ─── INIT ───
@@ -1742,10 +1797,8 @@ abrirDB().then(async () => {
     medsGuardadas.forEach(f => mediciones.push({ dataUrl: f.dataUrl, caption: f.caption }));
     renderMediciones();
   }
-  // Restaurar borrador de campos
-  if (localStorage.getItem(DRAFT_KEY)) {
-    restaurarBorrador();
-  }
+  // Restaurar borrador de campos (revisa IndexedDB y localStorage automáticamente)
+  await restaurarBorrador();
   if (fotosGuardadas.length || medsGuardadas.length) {
     showToast('📋 Borrador restaurado — fotos incluidas');
   }
