@@ -1388,7 +1388,7 @@ async function generatePDF() {
   window.open(url, '_blank');
   showToast('✅ PDF listo y agregado al Excel del día');
   const a = document.createElement('a');
-  a.href = url; a.download = 'visita ' + fechaVal + '.pdf'; a.click();
+  a.href = url; a.download = 'Reporte ID-' + idVal + '.pdf'; a.click();
 }
 
 // ─── METRO N/A ───
@@ -1630,7 +1630,7 @@ function exportarExcel() {
     XLSX.utils.book_append_sheet(wb, wsTotal, 'Todas las visitas');
   }
 
-  XLSX.writeFile(wb, `visitas_${hoy}.xlsx`);
+  XLSX.writeFile(wb, `Visitas_${hoy}.xlsx`);
   showToast('📊 Excel exportado — ' + dias.length + ' día(s)');
 }
 
