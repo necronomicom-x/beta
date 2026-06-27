@@ -377,8 +377,8 @@ textarea{resize:vertical;min-height:80px;line-height:1.5}
     <div class="field" id="fieldFam">
       <label class="field-label"><span class="field-dot"></span>FAM (Atenuador)</label>
       <div class="pill-group" id="fam">
-        <div class="pill" onclick="selectSiNo(this,'fam','no');toggleFam(false)">No tiene</div>
-        <div class="pill" onclick="selectSiNo(this,'fam','si');toggleFam(true)">Sí</div>
+        <div class="pill" onclick="selectPill(this,'fam');toggleFam(false)">No tiene</div>
+        <div class="pill" onclick="selectPill(this,'fam');toggleFam(true)">Sí</div>
         <div class="pill" onclick="selectPill(this,'fam',true);toggleFam(true)">Otro</div>
       </div>
       <div class="other-input" id="fam_other">
@@ -695,39 +695,35 @@ function toggleFam(show) {
   document.getElementById('fanValDiv').style.display = show ? 'block' : 'none';
   if (!show) {
     document.querySelectorAll('#famDb .pill').forEach(p => p.classList.remove('selected'));
-    const otherEl = document.getElementById('famDb_otherVal');
-    if (otherEl) otherEl.value = '';
+    const el = document.getElementById('famDb_otherVal');
+    if (el) el.value = '';
   }
 }
 
 function getFamDisplay() {
   const famSel = getGroupVal('fam');
-  if (famSel === 'No tiene' || famSel === '—') return 'No tiene';
+  if (!famSel || famSel === '—' || famSel === 'No tiene') return 'No tiene';
   const dbSel = getGroupVal('famDb');
-  if (dbSel && dbSel !== '—') return dbSel; // ej. "6 dB"
-  return famSel; // "Otro" con texto
+  if (dbSel && dbSel !== '—') return dbSel; // "6 dB", "8 dB", etc.
+  const otro = document.getElementById('fam_otherVal')?.value?.trim();
+  if (otro) return otro;
+  return famSel;
 }
 
-// ─── VISITA EFECTIVA → obligatoriedad dinámica ───
+// ─── VISITA EFECTIVA ───
 function toggleVisitaEfectiva(efectiva) {
   const fieldMac = document.getElementById('fieldModeloCM');
   const fieldFam = document.getElementById('fieldFam');
-  if (!fieldMac || !fieldFam) return;
-
-  // Limpiar asterisco previo
-  fieldMac.querySelector('.required-star')?.remove();
-  fieldFam.querySelector('.required-star')?.remove();
-  fieldMac.classList.remove('field-error');
-  fieldFam.classList.remove('field-error');
-
+  // Limpiar asteriscos previos
+  fieldMac?.querySelector('.required-star')?.remove();
+  fieldFam?.querySelector('.required-star')?.remove();
+  fieldMac?.classList.remove('field-error');
+  fieldFam?.classList.remove('field-error');
   if (efectiva) {
-    const starMac = document.createElement('span');
-    starMac.className = 'required-star'; starMac.textContent = '*';
-    fieldMac.querySelector('.field-label')?.appendChild(starMac);
-
-    const starFam = document.createElement('span');
-    starFam.className = 'required-star'; starFam.textContent = '*';
-    fieldFam.querySelector('.field-label')?.appendChild(starFam);
+    const sm = document.createElement('span'); sm.className='required-star'; sm.textContent='*';
+    fieldMac?.querySelector('.field-label')?.appendChild(sm);
+    const sf = document.createElement('span'); sf.className='required-star'; sf.textContent='*';
+    fieldFam?.querySelector('.field-label')?.appendChild(sf);
   }
 }
 function addSN() {
@@ -921,8 +917,6 @@ function renderExtraFields() {
 }
 
 function buildSummary() {
-  const fanValStr = document.getElementById('fanVal')?.value?.trim();
-  const fanDisplay = getGroupVal('fan') + (fanValStr ? ' — ' + fanValStr : '');
   const splittersData = getSplittersData();
   const cantSplitters = getGroupVal('cantSplitters');
 
@@ -944,7 +938,7 @@ function buildSummary() {
     ['Isolator', getGroupVal('isolador')],
     ['Splitters', cantSplitters],
     ...splittersData.map(s => [`  Splitter ${s.num}`, `${s.tipo} | Term: ${s.term}${s.coment ? ' ⚠️ ' + s.coment : ''}`]),
-    ['FAN / Atenuador', fanDisplay],
+    ['FAM (Atenuador)',   getFamDisplay()],
     ['Calificación', getGroupVal('calificacion')],
     ['Instalación estética', getGroupVal('estetica')],
     ...extraFields.filter(f => f.label).map(f => [f.label, f.value || '—']),
@@ -1501,7 +1495,9 @@ function limpiarFormulario() {
   document.getElementById('fanValDiv').style.display = 'none';
   document.getElementById('splittersList').innerHTML = '';
   document.getElementById('snField').style.display = 'block';
-  document.getElementById('termComentarioDiv_sp_1') && (document.getElementById('splittersList').innerHTML = '');
+  // Quitar asteriscos dinámicos de MAC y FAM
+  document.getElementById('fieldModeloCM')?.querySelector('.required-star')?.remove();
+  document.getElementById('fieldFam')?.querySelector('.required-star')?.remove();
 
   // Metro N/A reset
   metroEsNA = false;
@@ -1561,15 +1557,14 @@ function recopilarDatos() {
     `Splitter ${s.num}: ${s.tipo} | Term: ${s.term}${s.coment ? ' ⚠️ '+s.coment : ''}`
   ).join(' / ');
 
-  // ── ORDEN Y NOMBRES DE COLUMNAS DEL EXCEL ──
   return {
     'Fecha':               v('fecha'),
     'ID Cliente':          v('idCliente'),
     'Nodo':                v('vineta'),
     'Visita Efectiva':     getGroupVal('visitaEfectiva'),
     'Observaciones':       v('observaciones'),
+    'Marca CM':            getGroupVal('marcaCM'),
     'MAC CM':              v('modeloCM'),
-    'Modelo CM':           getGroupVal('marcaCM'),
     'Velocidad':           getGroupVal('velocidad'),
     'Cantidad STB':        getGroupVal('cantStb'),
     'S/N Decos':           getSNList().map(s => s.val).filter(x => x && x.trim() && x !== '—').join(', ') || '—',
@@ -1738,7 +1733,7 @@ function armarDraft() {
     metroExt:      document.getElementById('metroExt')?.value || '',
     metroInt:      document.getElementById('metroInt')?.value || '',
     grapas:        document.getElementById('grapas')?.value || '',
-    fanVal:        document.getElementById('fanVal')?.value || '',
+    
     metroEsNA,
     // S/N list
     snList: getSNList().map(s => s.val),
@@ -1751,7 +1746,7 @@ function armarDraft() {
   // ── GRUPOS DE PILLS QUE SE GUARDAN ──
   // Si agregás un nuevo campo de pills al formulario, sumalo a esta lista
   const grupos = ['velocidad','marcaCM','visitaEfectiva','cantStb','cantSplitters','conectoresF','isolador',
-                  'clampcut','mastil','fan','estetica','calificacion'];
+                  'clampcut','mastil','fam','famDb','estetica','calificacion'];
   grupos.forEach(gid => {
     const sel = document.querySelector(`#${gid} .pill.selected, #${gid} .pill.si, #${gid} .pill.no`);
     draft.pills[gid] = sel ? sel.innerText.trim() : '';
@@ -1796,7 +1791,7 @@ async function restaurarBorrador() {
     setVal('metroExt', draft.metroExt);
     setVal('metroInt', draft.metroInt);
     setVal('grapas', draft.grapas);
-    setVal('fanVal', draft.fanVal);
+    
 
     // Metro N/A
     if (draft.metroEsNA) toggleMetroNA(true);
@@ -1828,9 +1823,9 @@ async function restaurarBorrador() {
     }
 
     // Fan toggle
-    if (draft.pills?.fan) {
-      const fanSi = draft.pills.fan.includes('Sí') || draft.pills.fan.includes('Si');
-      toggleFan(fanSi);
+    if (draft.pills?.fam) {
+      const famSi = draft.pills.fam === 'Sí';
+      toggleFam(famSi);
     }
 
     // Extra fields
