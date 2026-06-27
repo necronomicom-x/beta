@@ -190,12 +190,13 @@ textarea{resize:vertical;min-height:80px;line-height:1.5}
       <input type="date" id="fecha">
     </div>
 
-    <div class="field">
-      <label class="field-label"><span class="field-dot"></span>Visita efectiva</label>
+    <div class="field" id="fieldVisitaEfectiva">
+      <label class="field-label"><span class="field-dot"></span>Visita efectiva<span class="required-star">*</span></label>
       <div class="pill-group" id="visitaEfectiva">
-        <div class="pill" onclick="selectSiNo(this,'visitaEfectiva','si')">✅ Sí</div>
-        <div class="pill" onclick="selectSiNo(this,'visitaEfectiva','no')">❌ No</div>
+        <div class="pill" onclick="selectPill(this,'visitaEfectiva');toggleVisitaEfectiva(true)" style="border-color:#86efac;color:#16a34a;font-weight:700">SI</div>
+        <div class="pill" onclick="selectPill(this,'visitaEfectiva');toggleVisitaEfectiva(false)">NO</div>
       </div>
+      <div class="field-error-msg">Este campo es obligatorio</div>
     </div>
 
     <div class="field" id="fieldObservaciones">
@@ -223,9 +224,10 @@ textarea{resize:vertical;min-height:80px;line-height:1.5}
       </div>
     </div>
 
-    <div class="field">
+    <div class="field" id="fieldModeloCM">
       <label class="field-label"><span class="field-dot"></span>Modelo / MAC CM</label>
       <input type="text" id="modeloCM" placeholder="ej. SB6183 / AA:BB:CC:DD:EE:FF">
+      <div class="field-error-msg">Obligatorio cuando la visita es efectiva</div>
     </div>
 
     <div class="field">
@@ -372,18 +374,33 @@ textarea{resize:vertical;min-height:80px;line-height:1.5}
       <div id="splittersList" style="margin-top:12px;display:flex;flex-direction:column;gap:12px"></div>
     </div>
 
-    <div class="field">
-      <label class="field-label"><span class="field-dot"></span>FAN / Atenuador</label>
-      <div class="pill-group" id="fan">
-        <div class="pill" onclick="selectSiNo(this,'fan','si');toggleFan(true)">✅ Sí</div>
-        <div class="pill" onclick="selectSiNo(this,'fan','no');toggleFan(false)">❌ No</div>
-        <div class="pill" onclick="selectPill(this,'fan',true);toggleFan(true)">Otro</div>
+    <div class="field" id="fieldFam">
+      <label class="field-label"><span class="field-dot"></span>FAM (Atenuador)</label>
+      <div class="pill-group" id="fam">
+        <div class="pill" onclick="selectSiNo(this,'fam','no');toggleFam(false)">No tiene</div>
+        <div class="pill" onclick="selectSiNo(this,'fam','si');toggleFam(true)">Sí</div>
+        <div class="pill" onclick="selectPill(this,'fam',true);toggleFam(true)">Otro</div>
       </div>
-      <div class="other-input" id="fan_other">
-        <input type="text" id="fan_otherVal" placeholder="Observación del atenuador">
+      <div class="other-input" id="fam_other">
+        <input type="text" id="fam_otherVal" placeholder="Observación del FAM">
       </div>
-      <div id="fanValDiv" style="display:none;margin-top:8px">
-        <input type="text" id="fanVal" placeholder="Valor del atenuador (opcional, ej. 6dB)">
+      <div id="fanValDiv" style="display:none;margin-top:10px">
+        <label class="field-label" style="margin-top:0"><span class="field-dot"></span>Valor del FAM</label>
+        <div class="pill-group" id="famDb">
+          <div class="pill" onclick="selectPill(this,'famDb')">2 dB</div>
+          <div class="pill" onclick="selectPill(this,'famDb')">3 dB</div>
+          <div class="pill" onclick="selectPill(this,'famDb')">4 dB</div>
+          <div class="pill" onclick="selectPill(this,'famDb')">5 dB</div>
+          <div class="pill" onclick="selectPill(this,'famDb')">6 dB</div>
+          <div class="pill" onclick="selectPill(this,'famDb')">7 dB</div>
+          <div class="pill" onclick="selectPill(this,'famDb')">8 dB</div>
+          <div class="pill" onclick="selectPill(this,'famDb')">9 dB</div>
+          <div class="pill" onclick="selectPill(this,'famDb')">10 dB</div>
+          <div class="pill" onclick="selectPill(this,'famDb',true)">Otro</div>
+        </div>
+        <div class="other-input" id="famDb_other" style="margin-top:6px">
+          <input type="number" id="famDb_otherVal" placeholder="Valor en dB" min="1" max="30">
+        </div>
       </div>
     </div>
   </div>
@@ -673,9 +690,45 @@ function getSplittersData() {
   return results;
 }
 
-// ─── TOGGLE FAN (muestra campo valor si hay atenuador) ───
-function toggleFan(show) {
+// ─── TOGGLE FAM ───
+function toggleFam(show) {
   document.getElementById('fanValDiv').style.display = show ? 'block' : 'none';
+  if (!show) {
+    document.querySelectorAll('#famDb .pill').forEach(p => p.classList.remove('selected'));
+    const otherEl = document.getElementById('famDb_otherVal');
+    if (otherEl) otherEl.value = '';
+  }
+}
+
+function getFamDisplay() {
+  const famSel = getGroupVal('fam');
+  if (famSel === 'No tiene' || famSel === '—') return 'No tiene';
+  const dbSel = getGroupVal('famDb');
+  if (dbSel && dbSel !== '—') return dbSel; // ej. "6 dB"
+  return famSel; // "Otro" con texto
+}
+
+// ─── VISITA EFECTIVA → obligatoriedad dinámica ───
+function toggleVisitaEfectiva(efectiva) {
+  const fieldMac = document.getElementById('fieldModeloCM');
+  const fieldFam = document.getElementById('fieldFam');
+  if (!fieldMac || !fieldFam) return;
+
+  // Limpiar asterisco previo
+  fieldMac.querySelector('.required-star')?.remove();
+  fieldFam.querySelector('.required-star')?.remove();
+  fieldMac.classList.remove('field-error');
+  fieldFam.classList.remove('field-error');
+
+  if (efectiva) {
+    const starMac = document.createElement('span');
+    starMac.className = 'required-star'; starMac.textContent = '*';
+    fieldMac.querySelector('.field-label')?.appendChild(starMac);
+
+    const starFam = document.createElement('span');
+    starFam.className = 'required-star'; starFam.textContent = '*';
+    fieldFam.querySelector('.field-label')?.appendChild(starFam);
+  }
 }
 function addSN() {
   const list = document.getElementById('snList');
@@ -923,11 +976,35 @@ async function generatePDF() {
   if (!idClienteEl.value || !idClienteEl.value.trim()) {
     idClienteField.classList.add('field-error'); valid = false;
   } else { idClienteField.classList.remove('field-error'); }
+
   const obsEl    = document.getElementById('observaciones');
   const obsField = document.getElementById('fieldObservaciones');
   if (!obsEl.value || !obsEl.value.trim()) {
     obsField.classList.add('field-error'); valid = false;
   } else { obsField.classList.remove('field-error'); }
+
+  // Visita efectiva obligatoria
+  const veField = document.getElementById('fieldVisitaEfectiva');
+  const veSel   = document.getElementById('visitaEfectiva')?.querySelector('.pill.selected,.pill.si,.pill.no');
+  if (!veSel) {
+    veField?.classList.add('field-error'); valid = false;
+  } else { veField?.classList.remove('field-error'); }
+
+  // Si visita efectiva = SI → MAC y FAM obligatorios
+  const esEfectiva = veSel?.innerText?.trim() === 'SI';
+  if (esEfectiva) {
+    const macField = document.getElementById('fieldModeloCM');
+    if (!document.getElementById('modeloCM')?.value?.trim()) {
+      macField?.classList.add('field-error'); valid = false;
+    } else { macField?.classList.remove('field-error'); }
+
+    const famField = document.getElementById('fieldFam');
+    const famSel   = document.getElementById('fam')?.querySelector('.pill.selected,.pill.si,.pill.no');
+    if (!famSel) {
+      famField?.classList.add('field-error'); valid = false;
+    } else { famField?.classList.remove('field-error'); }
+  }
+
   if (!valid) { showToast('⚠️ Completá los campos obligatorios (*)'); goTo(0); return; }
 
   const { jsPDF } = window.jspdf;
@@ -1158,13 +1235,11 @@ async function generatePDF() {
   sp(3);
   secH(4, 'Accesorios de red');
   resetRows();
-  const fanValStr = document.getElementById('fanVal')?.value?.trim() || '';
-  const fanFull   = getGroupVal('fan') + (fanValStr ? ' — ' + fanValStr : '');
   rows([
     ['Clamp Cut',         getGroupVal('clampcut')],
     ['Mástil',            getGroupVal('mastil')],
     ['Isolator',          getGroupVal('isolador')],
-    ['FAN / Atenuador',   fanFull],
+    ['FAM (Atenuador)',   getFamDisplay()],
     ['Splitters (cant.)', getGroupVal('cantSplitters')],
   ]);
   const splittersData = getSplittersData();
@@ -1482,28 +1557,24 @@ function saveVisitas(arr) {
 }
 
 function recopilarDatos() {
-  const fanValStr = document.getElementById('fanVal')?.value?.trim() || '';
-  const splittersData = getSplittersData();
-  const splittersResumen = splittersData.map(s =>
+  const splittersResumen = getSplittersData().map(s =>
     `Splitter ${s.num}: ${s.tipo} | Term: ${s.term}${s.coment ? ' ⚠️ '+s.coment : ''}`
   ).join(' / ');
 
   // ── ORDEN Y NOMBRES DE COLUMNAS DEL EXCEL ──
-  // El orden de este objeto es el orden de las columnas en el Excel.
-  // Para cambiar un nombre de columna, editá el texto entre comillas (lado izquierdo).
   return {
     'Fecha':               v('fecha'),
     'ID Cliente':          v('idCliente'),
     'Nodo':                v('vineta'),
+    'Visita Efectiva':     getGroupVal('visitaEfectiva'),
     'Observaciones':       v('observaciones'),
     'MAC CM':              v('modeloCM'),
-    'Model CM':            getGroupVal('marcaCM'),
-    'Visita Efectiva':     getGroupVal('visitaEfectiva'),
+    'Modelo CM':           getGroupVal('marcaCM'),
     'Velocidad':           getGroupVal('velocidad'),
     'Cantidad STB':        getGroupVal('cantStb'),
-    'S/N Decos':           getSNList().map(s => s.val).filter(x=>x!=='—').join(', ') || '—',
-    'Acometida ext (m)':   metroEsNA ? 'N/A' : (v('metroExt') || '—'),
-    'Conexiones int (m)':  v('metroInt'),
+    'S/N Decos':           getSNList().map(s => s.val).filter(x => x && x.trim() && x !== '—').join(', ') || '—',
+    'Cable ext (m)':       metroEsNA ? 'N/A' : (v('metroExt') || '—'),
+    'Cable int (m)':       v('metroInt') || '—',
     'Conectores F':        getGroupVal('conectoresF'),
     'Grapas':              v('grapas'),
     'Clamp Cut':           getGroupVal('clampcut'),
@@ -1511,7 +1582,7 @@ function recopilarDatos() {
     'Isolator':            getGroupVal('isolador'),
     'Splitters':           getGroupVal('cantSplitters'),
     'Detalle splitters':   splittersResumen || '—',
-    'FAN / Atenuador':     getGroupVal('fan') + (fanValStr ? ' — '+fanValStr : ''),
+    'FAM (Atenuador)':     getFamDisplay(),
     'Estética':            getGroupVal('estetica'),
     'Calificación':        getGroupVal('calificacion'),
     'Fotos':               photos.length + ' foto(s)',
