@@ -359,7 +359,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.5}
       </div>
     </div>
 
-    <div class="field">
+    <div class="field" id="fieldCantSplitters">
       <label class="field-label"><span class="field-dot"></span>Splitters instalados</label>
       <div class="pill-group" id="cantSplitters">
         <div class="pill" onclick="selectPill(this,'cantSplitters');renderSplitters(0)">No hay</div>
@@ -371,6 +371,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.5}
       <div class="other-input" id="cantSplitters_other">
         <input type="text" id="cantSplitters_otherVal" placeholder="Cantidad de splitters">
       </div>
+      <div class="field-error-msg">Obligatorio cuando la visita es efectiva</div>
       <div id="splittersList" style="margin-top:12px;display:flex;flex-direction:column;gap:12px"></div>
     </div>
 
@@ -712,18 +713,22 @@ function getFamDisplay() {
 
 // ─── VISITA EFECTIVA ───
 function toggleVisitaEfectiva(efectiva) {
-  const fieldMac = document.getElementById('fieldModeloCM');
-  const fieldFam = document.getElementById('fieldFam');
-  // Limpiar asteriscos previos
-  fieldMac?.querySelector('.required-star')?.remove();
-  fieldFam?.querySelector('.required-star')?.remove();
-  fieldMac?.classList.remove('field-error');
-  fieldFam?.classList.remove('field-error');
+  const fieldMac      = document.getElementById('fieldModeloCM');
+  const fieldFam      = document.getElementById('fieldFam');
+  const fieldSplitter = document.getElementById('fieldCantSplitters');
+
+  // Limpiar asteriscos y errores previos
+  [fieldMac, fieldFam, fieldSplitter].forEach(f => {
+    f?.querySelector('.required-star')?.remove();
+    f?.classList.remove('field-error');
+  });
+
   if (efectiva) {
-    const sm = document.createElement('span'); sm.className='required-star'; sm.textContent='*';
-    fieldMac?.querySelector('.field-label')?.appendChild(sm);
-    const sf = document.createElement('span'); sf.className='required-star'; sf.textContent='*';
-    fieldFam?.querySelector('.field-label')?.appendChild(sf);
+    [fieldMac, fieldFam, fieldSplitter].forEach(f => {
+      const star = document.createElement('span');
+      star.className = 'required-star'; star.textContent = '*';
+      f?.querySelector('.field-label')?.appendChild(star);
+    });
   }
 }
 function addSN() {
@@ -731,9 +736,14 @@ function addSN() {
   const n = list.children.length + 1;
   const row = document.createElement('div');
   row.className = 'sn-row';
+  row.style.cssText = 'display:grid;grid-template-columns:auto 110px 1fr auto;gap:6px;align-items:center;margin-bottom:6px';
   row.innerHTML = `
     <div class="sn-num">${n}</div>
-    <input type="text" placeholder="S/N Deco ${n}">
+    <select style="margin:0;padding:9px 8px;font-size:13px;background:#fff;border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
+      <option value="OneTV">OneTV</option>
+      <option value="DVB">DVB</option>
+    </select>
+    <input type="text" placeholder="S/N Deco ${n}" style="margin:0">
     <button class="sn-del" onclick="removeSN(this)">×</button>`;
   list.appendChild(row);
   renumberSN();
@@ -752,8 +762,11 @@ function renumberSN() {
 }
 
 function getSNList() {
-  return [...document.querySelectorAll('#snList .sn-row input')]
-    .map((inp, i) => ({ num: i + 1, val: inp.value.trim() || '—' }));
+  return [...document.querySelectorAll('#snList .sn-row')].map((row, i) => ({
+    num:  i + 1,
+    tipo: row.querySelector('select')?.value || '—',
+    val:  row.querySelector('input')?.value?.trim() || '—',
+  }));
 }
 
 // ─── GET VALUES ───
@@ -928,7 +941,7 @@ function buildSummary() {
     ['Marca CM', getGroupVal('marcaCM')], ['Modelo / MAC', v('modeloCM')],
     ['Velocidad contratada', getGroupVal('velocidad')],
     ['Cantidad STB', getGroupVal('cantStb')],
-    ...getSNList().map(s => ['S/N Deco ' + s.num, s.val]),
+    ...getSNList().filter(s => s.val && s.val !== '—').map(s => [`Deco ${s.num} (${s.tipo})`, s.val]),
     ['Cable externo', metroEsNA ? 'N/A (visita no realizada)' : (v('metroExt') !== '—' ? v('metroExt') + ' m' : '—')],
     ['Cable interno', v('metroInt') !== '—' ? v('metroInt') + ' m' : '—'],
     ['Conectores F', getGroupVal('conectoresF')],
@@ -984,7 +997,7 @@ async function generatePDF() {
     veField?.classList.add('field-error'); valid = false;
   } else { veField?.classList.remove('field-error'); }
 
-  // Si visita efectiva = SI → MAC y FAM obligatorios
+  // Si visita efectiva = SI → MAC, FAM y Splitters obligatorios
   const esEfectiva = veSel?.innerText?.trim() === 'SI';
   if (esEfectiva) {
     const macField = document.getElementById('fieldModeloCM');
@@ -997,6 +1010,12 @@ async function generatePDF() {
     if (!famSel) {
       famField?.classList.add('field-error'); valid = false;
     } else { famField?.classList.remove('field-error'); }
+
+    const splField = document.getElementById('fieldCantSplitters');
+    const splSel   = document.getElementById('cantSplitters')?.querySelector('.pill.selected,.pill.si,.pill.no');
+    if (!splSel) {
+      splField?.classList.add('field-error'); valid = false;
+    } else { splField?.classList.remove('field-error'); }
   }
 
   if (!valid) { showToast('⚠️ Completá los campos obligatorios (*)'); goTo(0); return; }
@@ -1111,8 +1130,10 @@ async function generatePDF() {
     doc.setFontSize(7.5); doc.setFont('helvetica','normal');
     doc.text(doc.splitTextToSize(label, lW-2)[0], x+3, cy+5.5);
     let vc = C.text;
-    if (vs==='Sí'||vs==='Si')           vc = C.green;
-    else if (vs==='No')                  vc = C.red;
+    if (vs==='SI')                     vc = C.green;
+    else if (vs==='NO')                vc = C.red;
+    else if (vs==='Sí'||vs==='Si')     vc = C.green;
+    else if (vs==='No')                vc = C.red;
     else if (vs.includes('Deficiente')) vc = C.red;
     else if (vs.includes('Regular'))    vc = C.orange;
     else if (vs.includes('Buena'))      vc = C.green;
@@ -1194,16 +1215,16 @@ async function generatePDF() {
   sp(3);
   secH(2, 'Cable Modem y STB');
   resetRows();
-  const snAll = getSNList().map(s => s.val).filter(x => x && x !== '—').join(', ') || '—';
   const marcaCMVal = getGroupVal('marcaCM');
   const modeloCMVal = v('modeloCM');
   const cmStr = [marcaCMVal !== '—' ? marcaCMVal : '', modeloCMVal !== '—' ? modeloCMVal : '']
     .filter(Boolean).join(' / ') || '—';
+  const snFiltered = getSNList().filter(s => s.val && s.val !== '—');
   rows([
     ['Marca / Modelo CM',    cmStr],
     ['Velocidad contratada', getGroupVal('velocidad')],
     ['Cantidad de STB',      getGroupVal('cantStb')],
-    ['S/N Decodificadores',  snAll],
+    ...snFiltered.map((s, i) => [`Deco ${s.num} — ${s.tipo}`, s.val]),
   ]);
 
   // ══════════════════════════════════════════
@@ -1495,9 +1516,10 @@ function limpiarFormulario() {
   document.getElementById('fanValDiv').style.display = 'none';
   document.getElementById('splittersList').innerHTML = '';
   document.getElementById('snField').style.display = 'block';
-  // Quitar asteriscos dinámicos de MAC y FAM
+  // Quitar asteriscos dinámicos de MAC, FAM y Splitters
   document.getElementById('fieldModeloCM')?.querySelector('.required-star')?.remove();
   document.getElementById('fieldFam')?.querySelector('.required-star')?.remove();
+  document.getElementById('fieldCantSplitters')?.querySelector('.required-star')?.remove();
 
   // Metro N/A reset
   metroEsNA = false;
@@ -1557,19 +1579,33 @@ function recopilarDatos() {
     `Splitter ${s.num}: ${s.tipo} | Term: ${s.term}${s.coment ? ' ⚠️ '+s.coment : ''}`
   ).join(' / ');
 
+  // S/N Decos en una sola celda: "OneTV: 123456, DVB: 789012"
+  const snResumen = getSNList()
+    .filter(s => s.val && s.val.trim() && s.val !== '—')
+    .map(s => `${s.tipo}: ${s.val}`)
+    .join(', ') || '—';
+
+  // Fecha en formato M/D/YYYY
+  let fechaFormateada = '—';
+  const fechaRaw = document.getElementById('fecha')?.value;
+  if (fechaRaw) {
+    const [y, m, d] = fechaRaw.split('-');
+    fechaFormateada = `${parseInt(m)}/${parseInt(d)}/${y}`;
+  }
+
   return {
-    'Fecha':               v('fecha'),
+    'Fecha':               fechaFormateada,
     'ID Cliente':          v('idCliente'),
     'Nodo':                v('vineta'),
-    'Visita Efectiva':     getGroupVal('visitaEfectiva'),
     'Observaciones':       v('observaciones'),
-    'Marca CM':            getGroupVal('marcaCM'),
     'MAC CM':              v('modeloCM'),
+    'Model CM':            getGroupVal('marcaCM'),
+    'Visita Efectiva':     getGroupVal('visitaEfectiva'),
     'Velocidad':           getGroupVal('velocidad'),
     'Cantidad STB':        getGroupVal('cantStb'),
-    'S/N Decos':           getSNList().map(s => s.val).filter(x => x && x.trim() && x !== '—').join(', ') || '—',
-    'Cable ext (m)':       metroEsNA ? 'N/A' : (v('metroExt') || '—'),
-    'Cable int (m)':       v('metroInt') || '—',
+    'S/N Decos':           snResumen,
+    'Acometida ext (m)':   metroEsNA ? 'N/A' : (v('metroExt') || '—'),
+    'Conexiones int (m)':  v('metroInt') || '—',
     'Conectores F':        getGroupVal('conectoresF'),
     'Grapas':              v('grapas'),
     'Clamp Cut':           getGroupVal('clampcut'),
@@ -1577,11 +1613,10 @@ function recopilarDatos() {
     'Isolator':            getGroupVal('isolador'),
     'Splitters':           getGroupVal('cantSplitters'),
     'Detalle splitters':   splittersResumen || '—',
-    'FAM (Atenuador)':     getFamDisplay(),
+    'FAM / Atenuador':     getFamDisplay(),
     'Estética':            getGroupVal('estetica'),
     'Calificación':        getGroupVal('calificacion'),
     'Fotos':               photos.length + ' foto(s)',
-    'Mediciones':          mediciones.length + ' archivo(s)',
   };
 }
 
@@ -1736,7 +1771,7 @@ function armarDraft() {
     
     metroEsNA,
     // S/N list
-    snList: getSNList().map(s => s.val),
+    snList: getSNList().map(s => ({ tipo: s.tipo, val: s.val })),
     // Pills — guardar el texto del que está seleccionado en cada grupo
     pills: {},
     // Campos "otro"
@@ -1796,13 +1831,24 @@ async function restaurarBorrador() {
     // Metro N/A
     if (draft.metroEsNA) toggleMetroNA(true);
 
-    // S/N list
+    // S/N list — restaurar tipo y S/N
     if (draft.snList && draft.snList.length) {
       document.getElementById('snList').innerHTML = '';
-      draft.snList.forEach(sn => {
+      draft.snList.forEach(item => {
         addSN();
-        const inputs = document.querySelectorAll('#snList .sn-row input');
-        if (inputs.length) inputs[inputs.length - 1].value = sn;
+        const rows = document.querySelectorAll('#snList .sn-row');
+        const lastRow = rows[rows.length - 1];
+        if (lastRow) {
+          const sel = lastRow.querySelector('select');
+          const inp = lastRow.querySelector('input');
+          // Compatibilidad con formato anterior (string) y nuevo (objeto)
+          if (typeof item === 'object') {
+            if (sel && item.tipo) sel.value = item.tipo;
+            if (inp && item.val) inp.value = item.val;
+          } else {
+            if (inp) inp.value = item;
+          }
+        }
       });
     }
 
