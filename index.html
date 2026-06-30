@@ -212,7 +212,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.5}
   <div class="card">
     <div class="card-title">Cable Modem</div>
 
-    <div class="field">
+    <div class="field" id="fieldMarcaCM">
       <label class="field-label"><span class="field-dot"></span>Marca del CM</label>
       <div class="pill-group" id="marcaCM">
         <div class="pill" onclick="selectPill(this,'marcaCM')">ARRIS</div>
@@ -222,6 +222,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.5}
       <div class="other-input" id="marcaCM_other">
         <input type="text" id="marcaCM_otherVal" placeholder="Especificá la marca">
       </div>
+      <div class="field-error-msg">Obligatorio cuando la visita es efectiva</div>
     </div>
 
     <div class="field" id="fieldModeloCM">
@@ -714,17 +715,18 @@ function getFamDisplay() {
 // ─── VISITA EFECTIVA ───
 function toggleVisitaEfectiva(efectiva) {
   const fieldMac      = document.getElementById('fieldModeloCM');
+  const fieldMarca    = document.getElementById('fieldMarcaCM');
   const fieldFam      = document.getElementById('fieldFam');
   const fieldSplitter = document.getElementById('fieldCantSplitters');
 
   // Limpiar asteriscos y errores previos
-  [fieldMac, fieldFam, fieldSplitter].forEach(f => {
+  [fieldMac, fieldMarca, fieldFam, fieldSplitter].forEach(f => {
     f?.querySelector('.required-star')?.remove();
     f?.classList.remove('field-error');
   });
 
   if (efectiva) {
-    [fieldMac, fieldFam, fieldSplitter].forEach(f => {
+    [fieldMac, fieldMarca, fieldFam, fieldSplitter].forEach(f => {
       const star = document.createElement('span');
       star.className = 'required-star'; star.textContent = '*';
       f?.querySelector('.field-label')?.appendChild(star);
@@ -997,13 +999,19 @@ async function generatePDF() {
     veField?.classList.add('field-error'); valid = false;
   } else { veField?.classList.remove('field-error'); }
 
-  // Si visita efectiva = SI → MAC, FAM y Splitters obligatorios
+  // Si visita efectiva = SI → MAC, Marca CM, FAM y Splitters obligatorios
   const esEfectiva = veSel?.innerText?.trim() === 'SI';
   if (esEfectiva) {
     const macField = document.getElementById('fieldModeloCM');
     if (!document.getElementById('modeloCM')?.value?.trim()) {
       macField?.classList.add('field-error'); valid = false;
     } else { macField?.classList.remove('field-error'); }
+
+    const marcaField = document.getElementById('fieldMarcaCM');
+    const marcaSel    = document.getElementById('marcaCM')?.querySelector('.pill.selected,.pill.si,.pill.no');
+    if (!marcaSel) {
+      marcaField?.classList.add('field-error'); valid = false;
+    } else { marcaField?.classList.remove('field-error'); }
 
     const famField = document.getElementById('fieldFam');
     const famSel   = document.getElementById('fam')?.querySelector('.pill.selected,.pill.si,.pill.no');
@@ -1516,8 +1524,9 @@ function limpiarFormulario() {
   document.getElementById('fanValDiv').style.display = 'none';
   document.getElementById('splittersList').innerHTML = '';
   document.getElementById('snField').style.display = 'block';
-  // Quitar asteriscos dinámicos de MAC, FAM y Splitters
+  // Quitar asteriscos dinámicos de MAC, Marca CM, FAM y Splitters
   document.getElementById('fieldModeloCM')?.querySelector('.required-star')?.remove();
+  document.getElementById('fieldMarcaCM')?.querySelector('.required-star')?.remove();
   document.getElementById('fieldFam')?.querySelector('.required-star')?.remove();
   document.getElementById('fieldCantSplitters')?.querySelector('.required-star')?.remove();
 
@@ -1617,6 +1626,7 @@ function recopilarDatos() {
     'Estética':            getGroupVal('estetica'),
     'Calificación':        getGroupVal('calificacion'),
     'Fotos':               photos.length + ' foto(s)',
+    'Mediciones':          mediciones.length + ' archivo(s)',
   };
 }
 
